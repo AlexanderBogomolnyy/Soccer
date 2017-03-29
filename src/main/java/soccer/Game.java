@@ -1,67 +1,123 @@
 package soccer;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class Game {
 
-    private Map<String, List<Byte>> teamMap = new HashMap<>();
-    private String team1;
-    private String team2;
+    public static final int FIRST_TEAM = 0;
+    public static final int SECOND_TEAM = 1;
+    private static final int SERIES = 5;
+    private static final int BREAK_ON_POINTS_FOR_PRELIMINARIES = 3;
+    private static final int LOSER_STATISTIC_BARRIER = 7;
+
+    private String firstTeam;
+    private String secondTeam;
+    private int[] score = new int[2];
+    private int[] kicksInSeries = new int[2];
+    private boolean finished;
+    private int teamStartedGame = -1;
+
+    private List<Integer> loserList = new ArrayList<>();
 
     public Game() {
     }
 
-    public Game(String team1, String team2) {
-        setTeams(team1, team2);
+    public Game(String firstTeam, String secondTeam) {
+        setTeams(firstTeam, secondTeam);
     }
 
-    public void setTeams(String team1, String team2) {
-        this.team1 = team1;
-        this.team2 = team2;
-        teamMap.put(team1, new ArrayList<>());
-        teamMap.put(team2, new ArrayList<>());
+    public void setTeams(String firstTeam, String secondTeam) {
+        this.firstTeam = firstTeam;
+        this.secondTeam = secondTeam;
     }
 
     public boolean isFinished() {
-        if (numberOfAttempt(team1) >= 5 && numberOfAttempt(team2) >= 5)
-            return Math.abs(getScore(team1) - getScore(team2)) > 0;
-        else
-            return false;
+        return finished;
     }
 
-    public int[] kick(String player, String team, int i) {
-        teamMap.get(team).add((byte) i);
+    public int[] kick(String player, int registeredTeam, boolean goal) {
+        checkSequence(registeredTeam);
+        if (goal)
+            score[registeredTeam]++;
+        kicksInSeries[registeredTeam]++;
+        checkIsFinished();
         return loadLastTen(player);
+    }
+
+    private void checkSequence(int registeredTeam) {
+        checkTeamIsRegisteredInGame(registeredTeam);
+        if(teamStartedGame == -1) {
+            teamStartedGame = registeredTeam;
+        } else {
+            if((kicksInSeries[FIRST_TEAM] == kicksInSeries[SECOND_TEAM]) == (registeredTeam != teamStartedGame)) {
+                throw new IllegalStateException("Team can't shoot twice in a row.");
+            }
+        }
+
+    }
+
+    private void checkIsFinished() {
+        if(finished)
+            throw new IllegalStateException("Game already finished.");
+        if(kicksInSeries[FIRST_TEAM] >= SERIES
+                && kicksInSeries[SECOND_TEAM] >= SERIES
+                && kicksInSeries[FIRST_TEAM] == kicksInSeries[SECOND_TEAM]
+                && score[FIRST_TEAM] != score[SECOND_TEAM]) {
+            finished = true;
+        }
+        if(kicksInSeries[FIRST_TEAM] < SERIES
+                && kicksInSeries[SECOND_TEAM] < SERIES
+                && kicksInSeries[FIRST_TEAM] == kicksInSeries[SECOND_TEAM]
+                && Math.abs(score[FIRST_TEAM] - score[SECOND_TEAM]) == BREAK_ON_POINTS_FOR_PRELIMINARIES) {
+            finished = true;
+        }
+    }
+
+    private void checkTeamIsRegisteredInGame(int team) {
+        if (team != FIRST_TEAM && team != SECOND_TEAM)
+            throw new IllegalArgumentException("This team is not in the game!");
     }
 
     protected int[] loadLastTen(String player) {
         return null;
     }
 
-    public int numberOfAttempt(String team) {
-        return teamMap.get(team).size();
+    public int numberOfAttempt(int registeredTeam) {
+        checkTeamIsRegisteredInGame(registeredTeam);
+        return kicksInSeries[registeredTeam];
     }
 
-    public int getScore(String team) {
-        int score = 0;
-        for(Byte attempt: teamMap.get(team))
-            score += attempt;
-        return score;
+    public int getScore(int registeredTeam) {
+        checkTeamIsRegisteredInGame(registeredTeam);
+        return score[registeredTeam];
     }
 
-    public String result() {
-        if (numberOfAttempt(team1) > 7 || numberOfAttempt(team2) > 7) {
-            if (getScore(team1) != getScore(team2))
-                if(getScore(team1) < getScore(team2)) {
-                    return "(" + getScore(team1) + ")" + team1 + "[" + costFailure(team1) + "]:" + team2 + "(" + getScore(team2) + ")";
-                } else {
-                    return "(" + getScore(team1) + ")" + team1 + ":[" + costFailure(team2) + "]" + team2 + "(" + getScore(team2) + ")";
-                }
+    public String getGameResult() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(").append(getScore(FIRST_TEAM)).append(")").append(firstTeam);
+        if(checkTeamIsLoser(FIRST_TEAM))
+            addCostOfLosersInOutput(sb, firstTeam);
+        sb.append(":");
+        if(checkTeamIsLoser(SECOND_TEAM))
+            addCostOfLosersInOutput(sb, secondTeam);
+        sb.append(secondTeam).append("(").append(getScore(SECOND_TEAM)).append(")");
+        return sb.toString();
+    }
+
+    private void addCostOfLosersInOutput(StringBuilder sb, String teamName) {
+        sb.append("[").append(costFailure(teamName)).append("]");
+    }
+
+    private boolean checkTeamIsLoser(int registeredTeam) {
+        if (loserList.contains(registeredTeam))
+            return true;
+        if (numberOfAttempt(registeredTeam) > LOSER_STATISTIC_BARRIER
+                && score[registeredTeam] < kicksInSeries[registeredTeam]) {
+            loserList.add(registeredTeam);
+            return true;
         }
-        return "(" + getScore(team1) + ")" + team1 + ":" + team2 + "(" + getScore(team2) + ")";
+        return false;
     }
 
     protected int costFailure(String team) {
